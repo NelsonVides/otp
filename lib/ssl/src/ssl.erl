@@ -96,7 +96,8 @@
          prf/5, 
          negotiated_protocol/1, 
 	 connection_information/1, 
-         connection_information/2]).
+         connection_information/2,
+     finished/2]).
 %% Misc
 -export([handle_options/2,
          handle_options/3,
@@ -929,6 +930,16 @@ controlling_process(#sslsocket{pid = {Listen,
      %% Meaningless but let it be allowed to conform with normal sockets  
     Transport:controlling_process(Listen, NewOwner).
 
+
+%%--------------------------------------------------------------------
+-spec finished(client | server, SslSocket) -> {ok, Result} | {error, reason()} when
+      SslSocket :: sslsocket(),
+      Result :: binary().
+%%
+%% Description: Return the Finished message for a pointed peer
+%%--------------------------------------------------------------------
+finished(Whose, #sslsocket{pid = [Pid|_]}) when is_pid(Pid), (Whose =:= client orelse Whose =:= server)->
+    ssl_connection:finished(Pid, Whose).
 
 %%--------------------------------------------------------------------
 -spec connection_information(SslSocket) -> {ok, Result} | {error, reason()} when

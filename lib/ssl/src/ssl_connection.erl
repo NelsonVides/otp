@@ -47,7 +47,7 @@
 -export([send/2, recv/3, close/2, shutdown/2,
 	 new_user/2, get_opts/2, set_opts/2, 
 	 peer_certificate/1, renegotiation/1, negotiated_protocol/1, prf/5,
-	 connection_information/2
+	 connection_information/2, finished/2
 	]).
 
 %% Alert and close handling
@@ -233,6 +233,14 @@ recv(Pid, Length, Timeout) ->
 %%--------------------------------------------------------------------
 connection_information(Pid, IncludeSecrityInfo) when is_pid(Pid) ->
     call(Pid, {connection_information, IncludeSecrityInfo}).
+
+%%--------------------------------------------------------------------
+-spec finished(pid(), client | server) -> {ok, list()} | {error, reason()}.
+%%
+%% Description: Get the SNI hostname
+%%--------------------------------------------------------------------
+finished(Pid, Whose) when is_pid(Pid) ->
+    call(Pid, {finished, Whose}).
 
 %%--------------------------------------------------------------------
 -spec close(pid(), {close, Timeout::integer() | 
@@ -1287,6 +1295,12 @@ connection({call, From}, {connection_information, true}, State, _) ->
 connection({call, From}, {connection_information, false}, State, _) ->
     Info = connection_info(State),
     hibernate_after(?FUNCTION_NAME, State, [{reply, From, {ok, Info}}]);
+connection({call, From}, {finished, client}, State = #state{}, _) ->
+    Info = extract_verify_data(client, State),
+    hibernate_after(?FUNCTION_NAME, State, [{reply, From, {ok, Info}}]);
+connection({call, From}, {finished, server}, State, _) ->
+    Info = extract_verify_data(server, State),
+    hibernate_after(?FUNCTION_NAME, State, [{reply, From, {ok, Info}}]);
 connection({call, From}, negotiated_protocol, 
 	   #state{handshake_env = #handshake_env{alpn = undefined,
                                                  negotiated_protocol = undefined}} = State, _) ->
@@ -1643,6 +1657,13 @@ format_status(terminate, [_, StateName, State]) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+extract_verify_data(client, #state{connection_states =
+                           #{current_write := #{client_verify_data := ClientFinished}}}) ->
+    {client_finished_message, ClientFinished};
+extract_verify_data(server, #state{connection_states =
+                           #{current_write := #{server_verify_data := ServerFinished}}}) ->
+    {server_finished_message, ServerFinished}.
+
 send_alert(Alert, connection, #state{static_env = #static_env{protocol_cb = Connection}} = State) ->
      Connection:send_alert_in_connection(Alert, State);
 send_alert(Alert, _, #state{static_env = #static_env{protocol_cb = Connection}} = State) ->
