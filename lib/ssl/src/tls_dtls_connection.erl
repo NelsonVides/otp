@@ -38,7 +38,7 @@
 -include("ssl_internal.hrl").
 -include("ssl_srp.hrl").
 
-%% TLS-1.0 to TLS-1.2 Specific User Events
+%% tls-1.0 to tls-1.2 specific user events
 -export([renegotiation/1, renegotiation/2, prf/5]).
 
 %% Data handling. Note renegotiation is replaced by sesion key update mechanism in TLS-1.3
