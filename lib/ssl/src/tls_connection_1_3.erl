@@ -117,6 +117,9 @@
 
 -behaviour(gen_statem).
 
+%% tls-1.3 specific user events
+-export([exporter/4]).
+
 %% gen_statem callbacks
 -export([init/1, callback_mode/0, terminate/3, code_change/4, format_status/2]).
 
@@ -142,6 +145,19 @@
          getopts/3,
          send_key_update/2,
          update_cipher_key/2]).
+
+%%====================================================================
+%% User events
+%%====================================================================
+
+%%--------------------------------------------------------------------
+-spec exporter(pid(), binary(), binary(), non_neg_integer()) ->
+		 {ok, binary()} | {error, reason()} | {'EXIT', term()}.
+%%
+%% Description: use a ssl sessions TLS HKDF to generate key material
+%%--------------------------------------------------------------------
+exporter(ConnectionPid, Label, Context, WantedLength) ->
+    ssl_gen_statem:call(ConnectionPid, {exporter, Label, Context, WantedLength}).
 
 %%====================================================================
 %% Internal API
@@ -451,6 +467,8 @@ connection({call, From}, negotiated_protocol,
                                                  negotiated_protocol = undefined}} = State) ->
     ssl_gen_statem:hibernate_after(?FUNCTION_NAME, State,
                     [{reply, From, {ok, SelectedProtocol}}]);
+connection({call, From}, Msg, State) when element(1, Msg) =:= exporter ->
+    handle_call(Msg, From, ?FUNCTION_NAME, State);
 connection(Type, Event, State) ->
     ssl_gen_statem:?FUNCTION_NAME(Type, Event, State).
 
@@ -585,3 +603,37 @@ init_max_early_data_size(client) ->
 init_max_early_data_size(server) ->
     ssl_config:get_max_early_data_size().
 
+%%--------------------------------------------------------------------
+%% Event handling functions called by state functions to handle
+%% common or unexpected events for the state.
+%%--------------------------------------------------------------------
+handle_call({exporter, Label, Context, WantedLength}, From, _,
+            #state{connection_states = ConnectionStates,
+                   handshake_env =
+                   #handshake_env{tls_handshake_history = {HandshakeMessages, _}},
+                   connection_env = #connection_env{negotiated_version = {3, 4}}}) ->
+    #{security_parameters := SecParams} =
+        ssl_record:current_connection_state(ConnectionStates, read),
+    #security_parameters{master_secret = MasterSecret,
+                         prf_algorithm = PRFAlgorithm} = SecParams,
+    % Reply = try
+		% SecretToUse = case Secret of
+				  % _ when is_binary(Secret) -> Secret;
+				  % master_secret -> MasterSecret
+			      % end,
+		% SeedToUse = lists:reverse(
+			      % lists:foldl(fun(X, Acc) when is_binary(X) -> [X|Acc];
+					     % (client_random, Acc) -> [ClientRandom|Acc];
+					     % (server_random, Acc) -> [ServerRandom|Acc]
+					  % end, [], Seed)),
+		% ssl_handshake:prf(ssl:tls_version(Version), PRFAlgorithm, SecretToUse, Label, SeedToUse, WantedLength)
+	    % catch
+		% exit:_ -> {error, badarg};
+		% error:Reason -> {error, Reason}
+	    % end,
+    ExporterMasterSecret = tls_v1:exporter_master_secret(PRFAlgorithm, MasterSecret, lists:reverse(HandshakeMessages)),
+    Msg = tls_v1:exporter(PRFAlgorithm, ExporterMasterSecret, Label, Context, WantedLength),
+    Reply = {ok, Msg},
+    {keep_state_and_data, [{reply, From, Reply}]};
+handle_call(Msg, From, StateName, State) ->
+   ssl_gen_statem:handle_call(Msg, From, StateName, State).

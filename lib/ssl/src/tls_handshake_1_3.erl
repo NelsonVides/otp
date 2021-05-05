@@ -1771,6 +1771,8 @@ calculate_traffic_secrets(#state{
         tls_v1:client_application_traffic_secret_0(HKDFAlgo, MasterSecret, lists:reverse(Messages)),
     ServerAppTrafficSecret0 =
         tls_v1:server_application_traffic_secret_0(HKDFAlgo, MasterSecret, lists:reverse(Messages)),
+    ExporterMasterSecret =
+        tls_v1:exporter_master_secret(HKDFAlgo, MasterSecret, lists:reverse(Messages)),
 
     %% Calculate traffic keys
     KeyLength = tls_v1:key_length(CipherSuite),

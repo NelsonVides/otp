@@ -89,6 +89,7 @@
          renegotiate/1, 
          update_keys/2,
          prf/5, 
+         exporter/4,
          negotiated_protocol/1, 
 	 connection_information/1, 
          connection_information/2]).
@@ -1387,6 +1388,23 @@ prf(#sslsocket{pid = [Pid|_]},
 prf(#sslsocket{pid = {dtls,_}}, _,_,_,_) ->
     {error, enotconn};
 prf(#sslsocket{pid = {Listen,_}}, _,_,_,_) when is_port(Listen) ->
+    {error, enotconn}.
+
+-spec exporter(SslSocket, Label, ContextValue, WantedLength) ->
+    {ok, binary()} | {error, reason()} when
+      SslSocket :: sslsocket(),
+      Label :: binary(),
+      ContextValue :: binary(),
+      WantedLength :: non_neg_integer().
+%%
+%% Description: use a ssl sessions TLS HKDF to generate key material
+%%--------------------------------------------------------------------
+exporter(#sslsocket{pid = [Pid|_]},
+    Label, ContextValue, WantedLength) when is_pid(Pid) ->
+    tls_connection_1_3:exporter(Pid, Label, ContextValue, WantedLength);
+exporter(#sslsocket{pid = {dtls,_}}, _,_,_) ->
+    {error, enotconn};
+exporter(#sslsocket{pid = {Listen,_}}, _,_,_) when is_port(Listen) ->
     {error, enotconn}.
 
 %%--------------------------------------------------------------------

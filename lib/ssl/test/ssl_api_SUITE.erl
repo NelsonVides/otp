@@ -64,6 +64,8 @@
          dh_params/1,
          prf/0,
          prf/1,
+         exporter/0,
+         exporter/1,
          hibernate/0,
          hibernate/1,
          hibernate_right_away/0,
@@ -206,25 +208,29 @@
 
 all() ->
     [
-     {group, 'tlsv1.3'},
-     {group, 'tlsv1.2'},
-     {group, 'tlsv1.1'},
-     {group, 'tlsv1'},
-     {group, 'dtlsv1.2'},
-     {group, 'dtlsv1'}
+     {group, 'tlsv1.3'}
+     % ,
+     % {group, 'tlsv1.2'}
+     % ,
+     % {group, 'tlsv1.1'},
+     % {group, 'tlsv1'},
+     % {group, 'dtlsv1.2'},
+     % {group, 'dtlsv1'}
     ].
 
 groups() ->
     [
-     {'tlsv1.3', [], ((gen_api_tests() ++ tls13_group() ++
-                           handshake_paus_tests()) --
-                          [dh_params,
-                           honor_server_cipher_order,
-                           honor_client_cipher_order,
-                           new_options_in_handshake,
-                           handshake_continue_tls13_client,
-                           invalid_options])
-      ++ (since_1_2() -- [conf_signature_algs])},
+     {'tlsv1.3', [],
+      [exporter]},
+      % ((gen_api_tests() ++ tls13_group() ++
+      %                      handshake_paus_tests()) --
+      %                     [dh_params,
+      %                      honor_server_cipher_order,
+      %                      honor_client_cipher_order,
+      %                      new_options_in_handshake,
+      %                      handshake_continue_tls13_client,
+      %                      invalid_options])
+      % ++ (since_1_2() -- [conf_signature_algs])},
      {'tlsv1.2', [],  gen_api_tests() ++ since_1_2() ++ handshake_paus_tests() ++ pre_1_3()},
      {'tlsv1.1', [],  gen_api_tests() ++ handshake_paus_tests() ++ pre_1_3()},
      {'tlsv1', [],  gen_api_tests() ++ handshake_paus_tests() ++ pre_1_3() ++ beast_mitigation_test()},
@@ -330,6 +336,7 @@ tls13_group() ->
      server_options_negative_dependency_role,
      invalid_options_tls13,
      cookie
+     % ,exporter
     ].
 
 init_per_suite(Config0) ->
@@ -656,6 +663,36 @@ prf(Config) when is_list(Config) ->
                           P = proplists:get_value(prf, Test),
                           prf_run_test(Config, Version, C, E, P)
                   end, TestPlan).
+
+%%--------------------------------------------------------------------
+%% TODO implement this
+exporter() ->
+    [{doc,"Test that ssl:exporter/5 generates the same keying material on client and server."}].
+exporter(Config) when is_list(Config) ->
+    TlsVer = ssl_test_lib:protocol_version(Config),
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+    Ciphers = ssl:cipher_suites(default, TlsVer),
+    BaseOpts = [{active, true}, {versions, [TlsVer]}, {ciphers, Ciphers}, {protocol, tls_or_dtls(TlsVer)}],
+    ServerOpts = BaseOpts ++ proplists:get_value(server_rsa_opts, Config),
+    ClientOpts = BaseOpts ++ proplists:get_value(client_rsa_opts, Config),
+    Server = ssl_test_lib:start_server(
+               [{node, ServerNode}, {port, 0}, {from, self()},
+                {mfa, {ssl, exporter, [<<"SOME-LABEL">>, <<>>, 16]}},
+                {options, ServerOpts}]),
+    Port = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client(
+               [{node, ClientNode}, {port, Port},
+                {host, Hostname}, {from, self()},
+                {mfa, {ssl, exporter, [<<"SOME-LABEL">>, <<>>, 16]}},
+                {options, ClientOpts}]),
+    {ok, ServerExporter} = ssl_test_lib:get_receive(Server),
+    {ok, ClientExporter} = ssl_test_lib:get_receive(Client),
+    case ServerExporter =:= ClientExporter of
+        true -> ok;
+        false -> ct:fail("Client and Server generated different exporter material")
+    end,
+    ssl_test_lib:close(Server),
+    ssl_test_lib:close(Client).
 
 %%--------------------------------------------------------------------
 dh_params() ->
@@ -2646,6 +2683,7 @@ connection_info_result(Socket) ->
 %%--------------------------------------------------------------------
 %% Internal functions ------------------------------------------------
 %%--------------------------------------------------------------------
+
 prf_create_plan(TlsVer, _PRFs, Results) when TlsVer == tlsv1
                                              orelse TlsVer == 'tlsv1.1'
                                              orelse TlsVer == 'dtlsv1' ->
@@ -2700,6 +2738,33 @@ prf_run_test(Config, TlsVer, Ciphers, Expected, Prf) ->
     ssl_test_lib:check_result(Server, ok, Client, ok),
     ssl_test_lib:close(Server),
     ssl_test_lib:close(Client).
+
+%% TODO
+% exporter_run_test(_, TlsVer, [], _, Prf) ->
+%     ct:fail({error, cipher_list_empty, TlsVer, Prf});
+% exporter_run_test(Config, TlsVer, Ciphers, Expected, Prf) ->
+%     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+%     BaseOpts = [{active, true}, {versions, [TlsVer]}, {ciphers, Ciphers}, {protocol, tls_or_dtls(TlsVer)}],
+%     ServerOpts = BaseOpts ++ proplists:get_value(server_rsa_opts, Config),
+%     ClientOpts = BaseOpts ++ proplists:get_value(client_rsa_opts, Config),
+%     Server = ssl_test_lib:start_server(
+%                [{node, ServerNode}, {port, 0}, {from, self()},
+%                 {mfa, {ssl, exporter, [TlsVer, Expected, Prf]}},
+%                 {options, ServerOpts}]),
+%     Port = ssl_test_lib:inet_port(Server),
+%     Client = ssl_test_lib:start_client(
+%                [{node, ClientNode}, {port, Port},
+%                 {host, Hostname}, {from, self()},
+%                 {mfa, {ssl, exporter, [TlsVer, Expected, Prf]}},
+%                 {options, ClientOpts}]),
+%     {ok, ServerExporter} = ssl_test_lib:get_receive(Server),
+%     {ok, ClientExporter} = ssl_test_lib:get_receive(Client),
+%     case ServerExporter =:= ClientExporter of
+%         true -> ok;
+%         false -> ct:fail("Client and Server generated different exporter material")
+%     end,
+%     ssl_test_lib:close(Server),
+%     ssl_test_lib:close(Client).
 
 
 tls_or_dtls('dtlsv1') ->

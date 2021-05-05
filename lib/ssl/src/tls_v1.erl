@@ -47,6 +47,7 @@
          des_suites/1,
          rsa_suites/1,
          prf/5,
+         exporter/5,
 	 ecc_curves/1, 
          ecc_curves/2, 
          oid_to_enum/1, 
@@ -442,7 +443,6 @@ pre_shared_key(RMS, Nonce, Algo) ->
     %%
     %%     HKDF-Expand-Label(resumption_master_secret,
     %%                      "resumption", ticket_nonce, Hash.length)
-    ssl_cipher:hash_size(Algo),
     hkdf_expand_label(RMS, <<"resumption">>, Nonce, ssl_cipher:hash_size(Algo), Algo).
 
 %% The next-generation application_traffic_secret is computed as:
@@ -1079,6 +1079,16 @@ prf(MAC, Secret, Label, Seed, WantedLength) ->
     %% PRF(secret, label, seed) = P_SHA256(secret, label + seed);
     LS = list_to_binary([Label, Seed]),
     p_hash(Secret, LS, WantedLength, MAC).
+
+
+%    TLS-Exporter(label, context_value, key_length) =
+%        HKDF-Expand-Label(Derive-Secret(Secret, label, ""),
+%                          "exporter", Hash(context_value), key_length)
+exporter(Algo, MasterSecret, Label, Context, WantedLength) ->
+    HashContextValue = crypto:hash(mac_algo(Algo), Context),
+    ExporterMasterSecret = exporter_master_secret(Algo, MasterSecret, <<>>),
+    hkdf_expand_label(derive_secret(ExporterMasterSecret, Label, <<>>, Algo),
+                      "exporter", HashContextValue, WantedLength, Algo).
 
 %%%% Misc help functions %%%%
 

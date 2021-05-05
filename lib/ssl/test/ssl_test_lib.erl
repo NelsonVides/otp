@@ -108,6 +108,7 @@
          check_ok/1,
          check_result/4,
          check_result/2,
+         get_receive/1,
          gen_check_result/4,
          basic_alert/4,
          session_id/1,
@@ -1116,7 +1117,7 @@ close(Pid, Timeout) ->
 check_result(Server, ServerMsg, Client, ClientMsg) ->
     {ClientIP, ClientPort} = get_ip_port(ServerMsg),
     receive 
-	{Server, ServerMsg} ->
+        {Server, ServerMsg} ->
 	    check_result(Client, ClientMsg);
         %% Workaround to accept local addresses (127.0.0.0/24)
         {Server, {ok, {{127,_,_,_}, ClientPort}}} when ClientIP =:= localhost  ->
@@ -1146,16 +1147,32 @@ check_result(Pid, Msg) ->
         %% Workaround to accept local addresses (127.0.0.0/24)
         {Pid, {ok, {{127,_,_,_}, ClientPort}}} when ClientIP =:= localhost ->
             ok;
-	{Port, {data,Debug}} when is_port(Port) ->
-	    ct:log("~p:~p~n Openssl ~s~n",[?MODULE,?LINE, Debug]),
-	    check_result(Pid,Msg);
+        {Port, {data,Debug}} when is_port(Port) ->
+            ct:log("~p:~p~n Openssl ~s~n",[?MODULE,?LINE, Debug]),
+            check_result(Pid,Msg);
         {Port,closed} when is_port(Port)->
             ct:log("~p:~p Openssl port closed ~n",[?MODULE,?LINE]),
             check_result(Pid, Msg);
-	Unexpected ->
-	    Reason = {{expected, {Pid, Msg}}, 
-		      {got, Unexpected}},
-	    ct:fail(Reason)
+        Unexpected ->
+            Reason = {{expected, {Pid, Msg}}, 
+                      {got, Unexpected}},
+            ct:fail(Reason)
+    end.
+
+get_receive(Pid) ->
+    receive
+        {Pid, Msg} ->
+            {ok, Msg};
+        {Port, {data,Debug}} when is_port(Port) ->
+            ct:log("~p:~p~n Openssl ~s~n",[?MODULE,?LINE, Debug]),
+            get_receive(Pid);
+        {Port,closed} when is_port(Port)->
+            ct:log("~p:~p Openssl port closed ~n",[?MODULE,?LINE]),
+            get_receive(Pid);
+        Unexpected ->
+            Reason = {got, Unexpected},
+            ct:fail(Reason)
+    after 10000 -> ct:fail("timeout")
     end.
 
 
