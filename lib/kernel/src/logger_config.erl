@@ -89,11 +89,11 @@ get_primary_level() ->
     persistent_term:get({?MODULE,?PRIMARY_KEY},?NOTICE).
 
 get(Tid,What) ->
-    case ets:lookup(Tid,table_key(What)) of
-        [{_,Config}] ->
-            {ok,Config};
-        [] ->
-            {error,{not_found,What}}
+    case ets:lookup_element(Tid, table_key(What), 2, undefined) of
+        undefined ->
+            {error,{not_found,What}};
+        Config ->
+            {ok,Config}
     end.
 
 get(Tid,What,Level) ->
