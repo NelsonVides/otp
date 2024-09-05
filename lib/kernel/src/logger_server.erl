@@ -426,7 +426,7 @@ default_config(Id) ->
       filter_default=>log,
       formatter=>{?DEFAULT_FORMATTER,#{}}}.
 default_config(Id,Module) ->
-    (default_config(Id))#{module=>Module}.
+    (default_config(Id))#{module=>Module, log_handler=> fun Module:log/2}.
 
 sanity_check(Owner,Key,Value) ->
     sanity_check_1(Owner,[{Key,Value}]).

@@ -42,14 +42,14 @@ log_allowed(Log, Tid, PrimaryConfig) ->
 call_handlers(#{level:=Level}=Log,[Id|Handlers],Tid) ->
     %% Get the config for handle Id
     case logger_config:get(Tid,Id,Level) of
-        {ok,#{module:=Module}=HandlerConfig} ->
+        {ok,#{log_handler:=LogHandler}=HandlerConfig} ->
             Filters = maps:get(filters,HandlerConfig,[]),
             case apply_filters(Id,Log,Filters,HandlerConfig) of
                 stop ->
                     ok;
                 Log1 ->
                     HandlerConfig1 = maps:without(?OWN_KEYS,HandlerConfig),
-                    try Module:log(Log1,HandlerConfig1)
+                    try LogHandler(Log1,HandlerConfig1)
                     catch C:R:S ->
                             case logger:remove_handler(Id) of
                                 ok ->
@@ -59,7 +59,7 @@ call_handlers(#{level:=Level}=Log,[Id|Handlers],Tid) ->
                                        debug,
                                        Log1,
                                        [{logger,removed_failing_handler},
-                                        {handler,{Id,Module}},
+                                        {handler,{Id,maps:get(module, HandlerConfig)}},
                                         {log_event,Log1},
                                         {config,HandlerConfig1},
                                         {reason,{C,R,filter_stacktrace(S)}}]);
