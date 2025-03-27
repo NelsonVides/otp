@@ -50,7 +50,8 @@ init([SenderArgs, ReciverArgs]) ->
     SupFlags = #{strategy      => one_for_all,
                  auto_shutdown => any_significant,
                  intensity     =>    0,
-                 period        => 3600
+                 period        => 3600,
+                 hibernate_after => 1000
                 },
     ChildSpecs = [sender(SenderArgs), receiver(ReciverArgs)],
     {ok, {SupFlags, ChildSpecs}}.
