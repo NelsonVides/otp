@@ -102,6 +102,25 @@ ethr_lfence__(void)
 	__asm__ __volatile__ ("lfence\n\t" : : : "memory");
 }
 
+/*
+ * A locked read-modify-write is a full barrier for ordinary loads and stores,
+ * and it is cheaper than mfence on current CPUs. Linux uses the same trick for
+ * smp_mb(). OR-ing zero into the stack leaves the value unchanged; the offset
+ * keeps it off the slot the next push or call is likely to use.
+ */
+static __inline__ void
+ethr_locked_mb__(void)
+{
+#if ETHR_SIZEOF_PTR == 4
+    if (ETHR_X86_RUNTIME_CONF_HAVE_NO_SSE2__)
+	ETHR_NO_SSE2_MEMORY_BARRIER__;
+    else
+	__asm__ __volatile__ ("lock; orl $0x0, -4(%%esp)\n\t" : : : "memory", "cc");
+#else
+    __asm__ __volatile__ ("lock; orl $0x0, -4(%%rsp)\n\t" : : : "memory", "cc");
+#endif
+}
+
 #define ETHR_X86_OUT_OF_ORDER_MEMBAR(B)				\
   ETHR_CHOOSE_EXPR((B) == ETHR_StoreStore,			\
 		   ethr_sfence__(),				\
@@ -131,7 +150,7 @@ ethr_lfence__(void)
  */
 
 #define ETHR_MEMBAR(B) \
-  ETHR_CHOOSE_EXPR((B) & ETHR_StoreLoad, ethr_mfence__(), ethr_cfence__())
+  ETHR_CHOOSE_EXPR((B) & ETHR_StoreLoad, ethr_locked_mb__(), ethr_cfence__())
 
 #endif /* !ETHR_X86_OUT_OF_ORDER */
 
